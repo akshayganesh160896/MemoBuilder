@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#40c1ac">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <title>Memo Builder</title>
+  <style>
+    :root {
+      --bg: #e9f7f4;
+      --panel: #f7fffd;
+      --ink: #123b36;
+      --muted: #3d6b64;
+      --accent: #40c1ac;
+      --accent-2: #2da896;
+      --border: #9fddd3;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      background:
+        radial-gradient(circle at 10% 10%, #bfeee6 0%, transparent 32%),
+        radial-gradient(circle at 90% 0%, #d4f7f0 0%, transparent 28%),
+        var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 1050px;
+      margin: 0 auto;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: 0 10px 35px rgba(31, 26, 23, 0.08);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+      letter-spacing: 0.2px;
+    }
+
+    p {
+      margin: 0 0 18px;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    @media (min-width: 900px) {
+      .grid {
+        grid-template-columns: 1.1fr 1fr;
+      }
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      background: #fff;
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 280px;
+      resize: vertical;
+      padding: 12px;
+      font-size: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      line-height: 1.35;
+      font-family: "Courier New", monospace;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    button {
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .secondary {
+      background: #fff;
+      color: var(--ink);
+      border-color: var(--border);
+    }
+
+    .note {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+
+    th, td {
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      padding: 8px 6px;
+    }
+
+    th {
+      background: #e9f9f6;
+      position: sticky;
+      top: 0;
+    }
+
+    .count {
+      text-align: right;
+      width: 90px;
+    }
+
+    .table-wrap {
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .summary {
+      margin-top: 12px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .empty {
+      color: var(--muted);
+      margin-top: 14px;
+      font-style: italic;
+    }
+
+    .highlight {
+      color: var(--accent-2);
+      font-weight: 700;
+    }
+
+    .footer {
+      margin-top: 14px;
+      font-size: 12px;
+      color: var(--muted);
+      text-align: right;
+      letter-spacing: 0.2px;
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>Memo Builder</h1>
+    <p>Paste Excel content, then convert it to an individual name count list sorted by count, then last name.</p>
+
+    <div class="grid">
+      <section class="card">
+        <label for="input">Excel Paste Input</label>
+        <textarea id="input" placeholder="Paste from Excel here. Names can be in separate cells or comma-separated inside a cell."></textarea>
+        <div class="actions">
+          <button id="processBtn" class="primary" type="button">Build Memo Table</button>
+          <button id="clearBtn" class="secondary" type="button">Clear</button>
+          <button id="copyBtn" class="secondary" type="button">Copy 2-Column</button>
+          <button id="downloadTsvBtn" class="secondary" type="button">Download TSV</button>
+          <button id="downloadCsvBtn" class="secondary" type="button">Download CSV</button>
+        </div>
+        <div class="note">
+          Split logic: rows by newline, cells by tab, names within each cell by comma. Export options create a 2-column Name/Count table.
+        </div>
+      </section>
+
+      <section class="card">
+        <label>Output</label>
+        <div id="outputWrap" class="table-wrap" hidden>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th class="count">Count</th>
+              </tr>
+            </thead>
+            <tbody id="resultBody"></tbody>
+          </table>
+        </div>
+        <div id="emptyState" class="empty">No output yet.</div>
+        <div id="summary" class="summary"></div>
+      </section>
+    </div>
+    <div class="footer">built by akshay</div>
+  </main>
+
+  <script>
+    const inputEl = document.getElementById('input');
+    const processBtn = document.getElementById('processBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const downloadTsvBtn = document.getElementById('downloadTsvBtn');
+    const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+    const outputWrap = document.getElementById('outputWrap');
+    const emptyState = document.getElementById('emptyState');
+    const resultBody = document.getElementById('resultBody');
+    const summaryEl = document.getElementById('summary');
+
+    function normalizeSpaces(text) {
+      return text.replace(/\s+/g, ' ').trim();
+    }
+
+    function titleCaseName(name) {
+      return name
+        .split(' ')
+        .map((part) => {
+          if (!part) return part;
+          return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+        })
+        .join(' ');
+    }
+
+    function getLastName(name) {
+      const cleaned = normalizeSpaces(name);
+      if (!cleaned) return '';
+      const parts = cleaned.split(' ');
+      return parts[parts.length - 1].toLowerCase();
+    }
+
+    function parseNames(raw) {
+      const counts = new Map();
+      const displayMap = new Map();
+
+      const rows = raw
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .split('\n');
+
+      for (const row of rows) {
+        if (!row.trim()) continue;
+
+        const cells = row.split('\t');
+        for (const cell of cells) {
+          const segments = cell.split(',');
+          for (const segment of segments) {
+            const normalized = normalizeSpaces(segment);
+            if (!normalized) continue;
+
+            const key = normalized.toLowerCase();
+            counts.set(key, (counts.get(key) || 0) + 1);
+
+            if (!displayMap.has(key)) {
+              displayMap.set(key, titleCaseName(normalized));
+            }
+          }
+        }
+      }
+
+      return Array.from(counts.entries())
+        .map(([key, count]) => ({
+          key,
+          name: displayMap.get(key) || key,
+          count,
+          lastName: getLastName(displayMap.get(key) || key)
+        }))
+        .sort((a, b) => {
+          const byCount = b.count - a.count;
+          if (byCount !== 0) return byCount;
+          const byLast = a.lastName.localeCompare(b.lastName);
+          if (byLast !== 0) return byLast;
+          return a.name.localeCompare(b.name);
+        });
+    }
+
+    function renderTable(rows) {
+      resultBody.innerHTML = '';
+
+      for (const row of rows) {
+        const tr = document.createElement('tr');
+
+        const nameTd = document.createElement('td');
+        nameTd.textContent = row.name;
+
+        const countTd = document.createElement('td');
+        countTd.className = 'count';
+        countTd.textContent = String(row.count);
+
+        tr.appendChild(nameTd);
+        tr.appendChild(countTd);
+        resultBody.appendChild(tr);
+      }
+
+      outputWrap.hidden = rows.length === 0;
+      emptyState.hidden = rows.length !== 0;
+
+      const totalMentions = rows.reduce((sum, row) => sum + row.count, 0);
+      summaryEl.innerHTML = rows.length
+        ? `<span class="highlight">${rows.length}</span> unique names, <span class="highlight">${totalMentions}</span> total mentions.`
+        : '';
+    }
+
+    function rowsToTsv(rows) {
+      const lines = ['Name\tCount'];
+      for (const row of rows) {
+        lines.push(`${row.name}\t${row.count}`);
+      }
+      return lines.join('\n');
+    }
+
+    function rowsToCsv(rows) {
+      const lines = ['Name,Count'];
+      for (const row of rows) {
+        const escapedName = `"${row.name.replace(/"/g, '""')}"`;
+        lines.push(`${escapedName},${row.count}`);
+      }
+      return lines.join('\n');
+    }
+
+    function getRowsForExport() {
+      if (processBtn.dataset.rows) {
+        return JSON.parse(processBtn.dataset.rows);
+      }
+
+      const rows = parseNames(inputEl.value || '');
+      renderTable(rows);
+      processBtn.dataset.rows = JSON.stringify(rows);
+      return rows;
+    }
+
+    function triggerDownload(content, fileName, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    }
+
+    function showTemporaryLabel(buttonEl, text) {
+      const original = buttonEl.textContent;
+      buttonEl.textContent = text;
+      setTimeout(() => {
+        buttonEl.textContent = original;
+      }, 1000);
+    }
+
+    processBtn.addEventListener('click', () => {
+      const rows = parseNames(inputEl.value || '');
+      renderTable(rows);
+      processBtn.dataset.rows = JSON.stringify(rows);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      inputEl.value = '';
+      resultBody.innerHTML = '';
+      outputWrap.hidden = true;
+      emptyState.hidden = false;
+      summaryEl.textContent = '';
+      delete processBtn.dataset.rows;
+    });
+
+    copyBtn.addEventListener('click', async () => {
+      const rows = getRowsForExport();
+      const tsv = rowsToTsv(rows);
+
+      try {
+        await navigator.clipboard.writeText(tsv);
+        showTemporaryLabel(copyBtn, 'Copied');
+      } catch (err) {
+        alert('Clipboard access failed. You can manually copy from the table output.');
+      }
+    });
+
+    downloadTsvBtn.addEventListener('click', () => {
+      const rows = getRowsForExport();
+      const tsv = rowsToTsv(rows);
+      triggerDownload(tsv, 'memo-builder-output.tsv', 'text/tab-separated-values;charset=utf-8');
+      showTemporaryLabel(downloadTsvBtn, 'Downloaded');
+    });
+
+    downloadCsvBtn.addEventListener('click', () => {
+      const rows = getRowsForExport();
+      const csv = rowsToCsv(rows);
+      triggerDownload(csv, 'memo-builder-output.csv', 'text/csv;charset=utf-8');
+      showTemporaryLabel(downloadCsvBtn, 'Downloaded');
+    });
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>

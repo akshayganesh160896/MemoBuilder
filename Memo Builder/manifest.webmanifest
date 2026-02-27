@@ -1,0 +1,23 @@
+{
+  "name": "Memo Builder",
+  "short_name": "Memo Builder",
+  "description": "Convert pasted Excel names into counted memo tables.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#e9f7f4",
+  "theme_color": "#40c1ac",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
