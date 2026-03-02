@@ -275,36 +275,80 @@
       return name.toLowerCase().replace(/[^a-z0-9 ]/g, '');
     }
 
-    function levenshtein(a, b) {
+    function damerauLevenshtein(a, b) {
       if (a === b) return 0;
       if (!a.length) return b.length;
       if (!b.length) return a.length;
 
-      const prev = new Array(b.length + 1);
-      const curr = new Array(b.length + 1);
+      const matrix = Array.from({ length: a.length + 1 }, () =>
+        new Array(b.length + 1).fill(0)
+      );
 
-      for (let j = 0; j <= b.length; j += 1) prev[j] = j;
+      for (let i = 0; i <= a.length; i += 1) matrix[i][0] = i;
+      for (let j = 0; j <= b.length; j += 1) matrix[0][j] = j;
 
       for (let i = 1; i <= a.length; i += 1) {
-        curr[0] = i;
         for (let j = 1; j <= b.length; j += 1) {
           const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-          curr[j] = Math.min(
-            prev[j] + 1,
-            curr[j - 1] + 1,
-            prev[j - 1] + cost
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j - 1] + cost
           );
+
+          if (
+            i > 1 &&
+            j > 1 &&
+            a[i - 1] === b[j - 2] &&
+            a[i - 2] === b[j - 1]
+          ) {
+            matrix[i][j] = Math.min(matrix[i][j], matrix[i - 2][j - 2] + 1);
+          }
         }
-        for (let j = 0; j <= b.length; j += 1) prev[j] = curr[j];
       }
 
-      return prev[b.length];
+      return matrix[a.length][b.length];
     }
 
     function maxAllowedDistance(length) {
       if (length <= 5) return 1;
       if (length <= 10) return 2;
       return 3;
+    }
+
+    function soundex(text) {
+      const cleaned = (text || '').toLowerCase().replace(/[^a-z]/g, '');
+      if (!cleaned) return '';
+
+      const first = cleaned[0].toUpperCase();
+      const map = {
+        b: '1', f: '1', p: '1', v: '1',
+        c: '2', g: '2', j: '2', k: '2', q: '2', s: '2', x: '2', z: '2',
+        d: '3', t: '3',
+        l: '4',
+        m: '5', n: '5',
+        r: '6'
+      };
+
+      let lastCode = map[cleaned[0]] || '';
+      let out = first;
+
+      for (let i = 1; i < cleaned.length && out.length < 4; i += 1) {
+        const code = map[cleaned[i]] || '';
+        if (code && code !== lastCode) out += code;
+        lastCode = code;
+      }
+
+      return (out + '000').slice(0, 4);
+    }
+
+    function isSimilarToken(a, b, maxDistance) {
+      if (!a || !b) return false;
+      if (a === b) return true;
+      if (a[0] !== b[0]) return false;
+      const d = damerauLevenshtein(a, b);
+      if (d <= maxDistance) return true;
+      return soundex(a) === soundex(b);
     }
 
     function getMergeDistance(nameA, nameB) {
@@ -318,20 +362,27 @@
       const bParts = b.split(' ').filter(Boolean);
       if (!aParts.length || !bParts.length) return -1;
       if (Math.abs(aParts.length - bParts.length) > 1) return -1;
-      if (aParts[0][0] !== bParts[0][0]) return -1;
-
-      const aLast = aParts[aParts.length - 1];
-      const bLast = bParts[bParts.length - 1];
-      const lastDistance = levenshtein(aLast, bLast);
-      if (lastDistance > 1) return -1;
 
       const aFlat = a.replace(/\s+/g, '');
       const bFlat = b.replace(/\s+/g, '');
-      const fullDistance = levenshtein(aFlat, bFlat);
+      const fullDistance = damerauLevenshtein(aFlat, bFlat);
       const threshold = maxAllowedDistance(Math.max(aFlat.length, bFlat.length));
+      if (fullDistance > threshold + 1) return -1;
 
-      if (fullDistance > threshold) return -1;
-      return fullDistance + lastDistance;
+      if (aParts.length === 1 && bParts.length === 1) {
+        if (!isSimilarToken(aParts[0], bParts[0], 2)) return -1;
+        return fullDistance;
+      }
+
+      const aFirst = aParts[0];
+      const bFirst = bParts[0];
+      if (!isSimilarToken(aFirst, bFirst, 1)) return -1;
+
+      const aLast = aParts[aParts.length - 1];
+      const bLast = bParts[bParts.length - 1];
+      if (!isSimilarToken(aLast, bLast, 2)) return -1;
+
+      return fullDistance;
     }
 
     function buildMergedRows(variants) {
