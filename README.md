@@ -8,6 +8,8 @@ Memo Builder converts pasted Excel-style name data into a simple name/count tabl
 - Handles multiple names in one cell when separated by commas.
 - Outputs one row per individual name with total occurrence count.
 - Sorts output by count first, then alphabetically by last name.
+- Attempts to merge likely spelling variants (typos) into one counted name.
+- Highlights merged rows so you can review possible typo merges.
 
 ## How to use
 1. Open `index.html` in your browser.

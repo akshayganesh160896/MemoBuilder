@@ -124,6 +124,10 @@
       font-size: 13px;
     }
 
+    .note strong {
+      color: var(--ink);
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -173,6 +177,16 @@
       font-weight: 700;
     }
 
+    .merged-row td {
+      background: #fff8df;
+    }
+
+    .merge-note {
+      margin-top: 4px;
+      font-size: 12px;
+      color: #8b6a11;
+    }
+
     .footer {
       margin-top: 14px;
       font-size: 12px;
@@ -200,6 +214,7 @@
         </div>
         <div class="note">
           Split logic: rows by newline, cells by tab, names within each cell by comma. Export options create a 2-column Name/Count table.
+          <br><strong>Auto-fix:</strong> likely spelling variants are merged and highlighted in output.
         </div>
       </section>
 
@@ -256,9 +271,134 @@
       return parts[parts.length - 1].toLowerCase();
     }
 
+    function toCompareText(name) {
+      return name.toLowerCase().replace(/[^a-z0-9 ]/g, '');
+    }
+
+    function levenshtein(a, b) {
+      if (a === b) return 0;
+      if (!a.length) return b.length;
+      if (!b.length) return a.length;
+
+      const prev = new Array(b.length + 1);
+      const curr = new Array(b.length + 1);
+
+      for (let j = 0; j <= b.length; j += 1) prev[j] = j;
+
+      for (let i = 1; i <= a.length; i += 1) {
+        curr[0] = i;
+        for (let j = 1; j <= b.length; j += 1) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          curr[j] = Math.min(
+            prev[j] + 1,
+            curr[j - 1] + 1,
+            prev[j - 1] + cost
+          );
+        }
+        for (let j = 0; j <= b.length; j += 1) prev[j] = curr[j];
+      }
+
+      return prev[b.length];
+    }
+
+    function maxAllowedDistance(length) {
+      if (length <= 5) return 1;
+      if (length <= 10) return 2;
+      return 3;
+    }
+
+    function getMergeDistance(nameA, nameB) {
+      const a = normalizeSpaces(toCompareText(nameA));
+      const b = normalizeSpaces(toCompareText(nameB));
+
+      if (!a || !b) return -1;
+      if (a === b) return 0;
+
+      const aParts = a.split(' ').filter(Boolean);
+      const bParts = b.split(' ').filter(Boolean);
+      if (!aParts.length || !bParts.length) return -1;
+      if (Math.abs(aParts.length - bParts.length) > 1) return -1;
+      if (aParts[0][0] !== bParts[0][0]) return -1;
+
+      const aLast = aParts[aParts.length - 1];
+      const bLast = bParts[bParts.length - 1];
+      const lastDistance = levenshtein(aLast, bLast);
+      if (lastDistance > 1) return -1;
+
+      const aFlat = a.replace(/\s+/g, '');
+      const bFlat = b.replace(/\s+/g, '');
+      const fullDistance = levenshtein(aFlat, bFlat);
+      const threshold = maxAllowedDistance(Math.max(aFlat.length, bFlat.length));
+
+      if (fullDistance > threshold) return -1;
+      return fullDistance + lastDistance;
+    }
+
+    function buildMergedRows(variants) {
+      const clusters = [];
+
+      for (const variant of variants) {
+        let bestIndex = -1;
+        let bestDistance = Infinity;
+
+        for (let i = 0; i < clusters.length; i += 1) {
+          const distance = getMergeDistance(variant.name, clusters[i].name);
+          if (distance >= 0 && distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = i;
+          }
+        }
+
+        if (bestIndex === -1) {
+          clusters.push({
+            name: variant.name,
+            count: variant.count,
+            lastName: getLastName(variant.name),
+            variants: [{ name: variant.name, count: variant.count }],
+            maxMemberCount: variant.count
+          });
+          continue;
+        }
+
+        const cluster = clusters[bestIndex];
+        cluster.count += variant.count;
+        cluster.variants.push({ name: variant.name, count: variant.count });
+
+        if (
+          variant.count > cluster.maxMemberCount ||
+          (variant.count === cluster.maxMemberCount && variant.name.localeCompare(cluster.name) < 0)
+        ) {
+          cluster.name = variant.name;
+          cluster.lastName = getLastName(variant.name);
+          cluster.maxMemberCount = variant.count;
+        }
+      }
+
+      return clusters
+        .map((cluster) => {
+          const variantsSorted = cluster.variants
+            .slice()
+            .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+          return {
+            name: cluster.name,
+            count: cluster.count,
+            lastName: cluster.lastName,
+            hasMergedVariants: variantsSorted.length > 1,
+            variants: variantsSorted.map((item) => item.name)
+          };
+        })
+        .sort((a, b) => {
+          const byCount = b.count - a.count;
+          if (byCount !== 0) return byCount;
+          const byLast = a.lastName.localeCompare(b.lastName);
+          if (byLast !== 0) return byLast;
+          return a.name.localeCompare(b.name);
+        });
+    }
+
     function parseNames(raw) {
-      const counts = new Map();
-      const displayMap = new Map();
+      const variants = new Map();
 
       const rows = raw
         .replace(/\r\n/g, '\n')
@@ -276,29 +416,15 @@
             if (!normalized) continue;
 
             const key = normalized.toLowerCase();
-            counts.set(key, (counts.get(key) || 0) + 1);
-
-            if (!displayMap.has(key)) {
-              displayMap.set(key, titleCaseName(normalized));
+            if (!variants.has(key)) {
+              variants.set(key, { name: titleCaseName(normalized), count: 0 });
             }
+            variants.get(key).count += 1;
           }
         }
       }
 
-      return Array.from(counts.entries())
-        .map(([key, count]) => ({
-          key,
-          name: displayMap.get(key) || key,
-          count,
-          lastName: getLastName(displayMap.get(key) || key)
-        }))
-        .sort((a, b) => {
-          const byCount = b.count - a.count;
-          if (byCount !== 0) return byCount;
-          const byLast = a.lastName.localeCompare(b.lastName);
-          if (byLast !== 0) return byLast;
-          return a.name.localeCompare(b.name);
-        });
+      return buildMergedRows(Array.from(variants.values()));
     }
 
     function renderTable(rows) {
@@ -306,9 +432,19 @@
 
       for (const row of rows) {
         const tr = document.createElement('tr');
+        if (row.hasMergedVariants) {
+          tr.className = 'merged-row';
+          tr.title = `Merged spellings: ${row.variants.join(', ')}`;
+        }
 
         const nameTd = document.createElement('td');
         nameTd.textContent = row.name;
+        if (row.hasMergedVariants) {
+          const mergeNote = document.createElement('div');
+          mergeNote.className = 'merge-note';
+          mergeNote.textContent = `Merged spellings: ${row.variants.join(', ')}`;
+          nameTd.appendChild(mergeNote);
+        }
 
         const countTd = document.createElement('td');
         countTd.className = 'count';
@@ -323,8 +459,9 @@
       emptyState.hidden = rows.length !== 0;
 
       const totalMentions = rows.reduce((sum, row) => sum + row.count, 0);
+      const mergedRows = rows.filter((row) => row.hasMergedVariants).length;
       summaryEl.innerHTML = rows.length
-        ? `<span class="highlight">${rows.length}</span> unique names, <span class="highlight">${totalMentions}</span> total mentions.`
+        ? `<span class="highlight">${rows.length}</span> unique names, <span class="highlight">${totalMentions}</span> total mentions${mergedRows ? `, <span class="highlight">${mergedRows}</span> merged spelling groups` : ''}.`
         : '';
     }
 
